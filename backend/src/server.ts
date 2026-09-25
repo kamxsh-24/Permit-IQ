@@ -6,8 +6,9 @@ import apiRouter from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
 import prisma from './services/db.js';
+import { PermitService } from './services/permitService.js';
 
-const app = express();
+export const app = express();
 
 // Global Middleware
 app.use(cors({
@@ -34,6 +35,10 @@ app.get('/', (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({
     success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Operational route not found in CMMS API Gateway',
+    },
     message: 'Operational route not found in CMMS API Gateway',
     timestamp: new Date().toISOString(),
   });
@@ -42,21 +47,40 @@ app.use((_req, res) => {
 // Error Handling Middleware
 app.use(errorHandler);
 
-// Server Lifecycle
-const server = app.listen(config.port, () => {
-  logger.info(`PTW CMMS Server running on port ${config.port} (${config.nodeEnv})`);
-  logger.info(`Health check accessible at: http://localhost:${config.port}/api/health`);
-});
+let server: any;
+let expiryInterval: NodeJS.Timeout | null = null;
+
+if (config.nodeEnv !== 'test') {
+  server = app.listen(config.port, () => {
+    logger.info(`PTW CMMS Server running on port ${config.port} (${config.nodeEnv})`);
+    logger.info(`Health check accessible at: http://localhost:${config.port}/api/health`);
+  });
+
+  // Background permit expiry check every 60 seconds
+  expiryInterval = setInterval(async () => {
+    try {
+      await PermitService.checkAndExpirePermits();
+    } catch (err: any) {
+      logger.error('Background expiry task failed:', err.message);
+    }
+  }, 60_000);
+}
 
 // Graceful Shutdown
 async function shutdown(signal: string) {
   logger.info(`Received ${signal}. Initiating graceful shutdown...`);
-  server.close(async () => {
-    logger.info('HTTP server closed.');
+  if (expiryInterval) clearInterval(expiryInterval);
+  if (server) {
+    server.close(async () => {
+      logger.info('HTTP server closed.');
+      await prisma.$disconnect();
+      logger.info('Database connections closed cleanly.');
+      process.exit(0);
+    });
+  } else {
     await prisma.$disconnect();
-    logger.info('Database connections closed cleanly.');
     process.exit(0);
-  });
+  }
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

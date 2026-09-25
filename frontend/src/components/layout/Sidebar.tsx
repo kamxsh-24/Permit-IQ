@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
@@ -11,8 +11,11 @@ import {
   X,
   Factory,
   HardHat,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { useAuth } from '../../context/AuthContext';
+import { RoleBadge } from '../common/RoleBadge';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,47 +23,38 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   const navItems = [
     {
       label: 'Dashboard',
       to: '/dashboard',
       icon: LayoutDashboard,
-      badge: undefined,
     },
     {
       label: 'All Permits',
       to: '/permits',
       icon: FileText,
-      badge: '28',
     },
     {
       label: 'Issue Permit',
       to: '/permits/new',
       icon: PlusCircle,
-      badge: undefined,
       highlight: true,
-    },
-    {
-      label: 'Approvals Queue',
-      to: '/permits/PTW-2026-0842/approval',
-      icon: CheckCircle2,
-      badge: '4 Pending',
-      badgeColor: 'bg-amber-950 text-amber-300 border-amber-800',
-    },
-    {
-      label: 'Site Closure & Sign-off',
-      to: '/permits/PTW-2026-0842/closure',
-      icon: Lock,
-      badge: '2 Open',
-      badgeColor: 'bg-sky-950 text-sky-300 border-sky-800',
     },
   ];
 
   const permitTypeCategories = [
-    { label: 'Hot Work Permits', count: 12, color: 'text-amber-400' },
-    { label: 'Confined Space', count: 5, color: 'text-purple-400' },
-    { label: 'Working at Height', count: 7, color: 'text-blue-400' },
-    { label: 'Electrical LOTO', count: 4, color: 'text-yellow-400' },
+    { label: 'Hot Work', color: 'text-amber-400' },
+    { label: 'Confined Space', color: 'text-purple-400' },
+    { label: 'Working at Height', color: 'text-blue-400' },
+    { label: 'Electrical LOTO', color: 'text-yellow-400' },
   ];
 
   return (
@@ -107,14 +101,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800/80">
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <Factory size={14} className="text-slate-400 flex-shrink-0" />
-            <span className="font-medium truncate text-slate-200">Sector 4 • Refining Complex</span>
+            <span className="font-medium truncate text-slate-200">
+              {user?.area?.plant?.name || user?.area?.name || 'Central Complex ARC-01'}
+            </span>
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400 font-mono">
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               OSHA/ISO Compliant
             </span>
-            <span className="text-slate-400">Shift A</span>
+            <span className="text-slate-400">{user?.role || 'OPERATOR'}</span>
           </div>
         </div>
 
@@ -144,22 +140,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 <item.icon size={18} className="flex-shrink-0" />
                 <span>{item.label}</span>
               </div>
-              {item.badge && (
-                <span
-                  className={cn(
-                    'text-[10px] px-1.5 py-0.5 rounded border font-mono font-medium',
-                    item.badgeColor || 'bg-slate-800 text-slate-300 border-slate-700'
-                  )}
-                >
-                  {item.badge}
-                </span>
-              )}
             </NavLink>
           ))}
 
           <div className="pt-6 pb-2">
             <div className="px-2 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Live Permits by Hazard
+              High-Risk Hazard Class
             </div>
             <div className="space-y-1">
               {permitTypeCategories.map((cat) => (
@@ -170,9 +156,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   <span className="flex items-center gap-2">
                     <span className={cn('text-sm leading-none', cat.color)}>●</span>
                     {cat.label}
-                  </span>
-                  <span className="font-mono text-slate-400 text-[11px] bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                    {cat.count}
                   </span>
                 </div>
               ))}
@@ -186,21 +169,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             <span>Hazard Alert Mode</span>
           </div>
           <p className="mt-1 text-[11px] text-amber-200/70 leading-relaxed">
-            Continuous atmospheric monitoring required for all active confined spaces.
+            Dual authorization sign-off enforced for Hot Work and Confined Space activities.
           </p>
         </div>
 
         <div className="p-3 border-t border-slate-800 bg-slate-950/60">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
-              <HardHat size={16} />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0">
+                <HardHat size={16} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-200 truncate">{user?.name || 'Alex Miller'}</p>
+                <div className="mt-0.5">
+                  <RoleBadge role={user?.role || 'REQUESTER'} size="sm" />
+                </div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-200 truncate">K. Henderson</p>
-              <p className="text-[10px] text-blue-400 font-mono uppercase tracking-wider truncate">
-                Safety Officer (Level 3)
-              </p>
-            </div>
+
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800/80 transition-colors"
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </aside>

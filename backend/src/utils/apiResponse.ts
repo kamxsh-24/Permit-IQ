@@ -1,6 +1,19 @@
 import { Response } from 'express';
 import { ApiResponse } from '../types/index.js';
 
+export class AppError extends Error {
+  constructor(
+    public override message: string,
+    public statusCode: number = 400,
+    public code: string = 'BAD_REQUEST',
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'AppError';
+    Object.setPrototypeOf(this, AppError.prototype);
+  }
+}
+
 export function sendSuccess<T>(
   res: Response,
   data: T,
@@ -20,12 +33,17 @@ export function sendError(
   res: Response,
   message = 'An error occurred',
   statusCode = 500,
-  errors?: any
+  code = 'INTERNAL_ERROR',
+  details?: any
 ): Response {
   const responseBody: ApiResponse = {
     success: false,
+    error: {
+      code,
+      message,
+      ...(details !== undefined ? { details } : {}),
+    },
     message,
-    errors,
     timestamp: new Date().toISOString(),
   };
   return res.status(statusCode).json(responseBody);

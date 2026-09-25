@@ -1,261 +1,284 @@
-import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
+  CheckCircle2,
+  Lock,
   ArrowLeft,
-  ShieldCheck,
   AlertTriangle,
-  FileCheck2,
+  FileCheck,
+  ShieldCheck,
+  Clock,
+  Building,
+  AlertOctagon,
 } from 'lucide-react';
+import apiClient from '../services/api';
+import { Permit } from '../types';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { PermitTypeBadge } from '../components/common/PermitTypeBadge';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { StatusBadge } from '../components/common/StatusBadge';
+import { useAuth } from '../context/AuthContext';
 
 export const Closure: React.FC = () => {
-  const { id = 'PTW-2026-0842' } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const [housekeepingDone, setHousekeepingDone] = useState(true);
-  const [isolationsRemoved, setIsolationsRemoved] = useState(true);
-  const [personnelEvacuated, setPersonnelEvacuated] = useState(true);
-  const [equipmentRestored, setEquipmentRestored] = useState(false);
-  const [workStatus, setWorkStatus] = useState<'COMPLETED' | 'INCOMPLETE_HANDOVER' | 'STOPPED_UNSAFE'>('COMPLETED');
-  const [closureNotes, setClosureNotes] = useState('');
+  const [permit, setPermit] = useState<Permit | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const canClose = housekeepingDone && isolationsRemoved && personnelEvacuated;
+  // Form states
+  const [completionNotes, setCompletionNotes] = useState<string>('');
+  const [verificationComment, setVerificationComment] = useState<string>('');
+  const [housekeepingVerified, setHousekeepingVerified] = useState<boolean>(true);
+  const [isolationsRestored, setIsolationsRestored] = useState<boolean>(true);
 
-  const handleClose = () => {
-    console.log(`[Permit Closeout Completed] for ${id}`, {
-      workStatus,
-      closureNotes,
-      housekeepingDone,
-      isolationsRemoved,
-    });
-    alert(`Permit ${id} closed and verified (placeholder)!`);
-    navigate(`/permits/${id}`);
+  const fetchPermit = async () => {
+    if (!id) return;
+    try {
+      setIsLoading(true);
+      const res = await apiClient.get(`/permits/${id}`);
+      if (res.data?.success) {
+        setPermit(res.data.data);
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to load permit details for closure');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPermit();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="py-24 text-center text-slate-400">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="font-mono text-xs uppercase tracking-wider">Loading Site Closeout Documentation...</p>
+      </div>
+    );
+  }
+
+  if (!permit) {
+    return (
+      <div className="py-16 text-center text-slate-400 space-y-3">
+        <AlertOctagon size={40} className="mx-auto text-red-400" />
+        <h2 className="text-lg font-bold text-slate-200">Permit Not Found</h2>
+        <Link to="/permits" className="inline-block px-4 py-2 bg-slate-800 rounded text-xs text-slate-200">
+          Back to Permits
+        </Link>
+      </div>
+    );
+  }
+
+  const isRequester = user?.id === permit.requesterId || user?.role === 'ADMIN';
+  const isSafetyOfficer = user?.role === 'SAFETY_OFFICER' || user?.role === 'ADMIN';
+
+  const handleCloseoutSubmit = async () => {
+    if (!completionNotes || completionNotes.trim().length < 5) {
+      setErrorMsg('Completion notes describing work execution and housekeeping status are mandatory (min 5 characters)');
+      return;
+    }
+    try {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      await apiClient.post(`/permits/${permit.id}/close`, {
+        completionNotes: completionNotes.trim(),
+      });
+      navigate(`/permits/${permit.id}`);
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Closeout failed';
+      setErrorMsg(msg);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleVerificationSubmit = async () => {
+    try {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      await apiClient.post(`/permits/${permit.id}/verify-closure`, {
+        verificationComment: verificationComment.trim() || 'Site de-isolated, inspected, and returned to production operations.',
+      });
+      navigate(`/permits/${permit.id}`);
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Verification failed';
+      setErrorMsg(msg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/permits/${id}`}
-            className="p-1.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
-          >
-            <ArrowLeft size={18} />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold font-mono text-slate-100 tracking-tight">
-                Permit Handover & Site Closeout
-              </h1>
-              <StatusBadge status="ACTIVE" size="sm" />
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+        <Link to={`/permits/${permit.id}`} className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors">
+          <ArrowLeft size={14} /> Back to Permit Details
+        </Link>
+        <span className="text-xs text-slate-400 font-mono">
+          Operator: <strong className="text-slate-200">{user?.name}</strong> ({user?.role})
+        </span>
+      </div>
+
+      {errorMsg && (
+        <div className="p-3 bg-red-950/40 border border-red-800 rounded-md text-red-200 text-xs flex items-center gap-2">
+          <AlertOctagon size={16} className="text-red-400 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      <Card
+        title={`Work Completion & Site De-Isolation Sign-Off: ${permit.permitNumber}`}
+        subtitle={`Current Status: ${permit.status} • Requester: ${permit.requester?.name}`}
+      >
+        <div className="space-y-6">
+          {/* Summary Box */}
+          <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-200">{permit.workDescription}</span>
+              <StatusBadge status={permit.status} size="sm" />
             </div>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Final inspection and sign-off for Permit <strong className="font-mono text-blue-400">{id}</strong>
+            <p className="text-slate-400">
+              Plant Location: {permit.plant?.name} • Area: {permit.area?.name} • Crew: {permit.contractorTeam}
             </p>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded bg-teal-950 text-teal-300 border border-teal-700/60 font-mono">
-            STAGE: SITE DE-COMMISSIONING
-          </span>
-        </div>
-      </div>
-
-      <div className="p-4 rounded-lg bg-amber-950/30 border border-amber-600/40 flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-200/90 leading-relaxed">
-          <p className="font-semibold text-amber-300">Mandatory De-Isolation Requirement</p>
-          <p className="mt-0.5">
-            Do not remove locks or energize systems until physical inspection confirms all tools are cleared,
-            personnel accounted for, and manway covers securely fastened.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card
-            title="Worksite De-Commissioning Checklist"
-            subtitle="Confirm restoration of physical boundary to operational baseline"
-          >
-            <div className="space-y-3">
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
-                  housekeepingDone
-                    ? 'bg-slate-950/90 border-emerald-600/40 text-slate-200'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={housekeepingDone}
-                  onChange={(e) => setHousekeepingDone(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                />
-                <div className="text-xs">
-                  <p className="font-semibold text-slate-200">Site Housekeeping Completed</p>
-                  <p className="text-slate-400 mt-0.5">
-                    All scrap, welding rods, flammable liquids, and temporary barricades removed.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
-                  isolationsRemoved
-                    ? 'bg-slate-950/90 border-emerald-600/40 text-slate-200'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isolationsRemoved}
-                  onChange={(e) => setIsolationsRemoved(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                />
-                <div className="text-xs">
-                  <p className="font-semibold text-slate-200">LOTO De-Isolation & Locks Removed</p>
-                  <p className="text-slate-400 mt-0.5">
-                    Personal safety padlocks returned to lockbox; piping blinds removed with new gaskets.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
-                  personnelEvacuated
-                    ? 'bg-slate-950/90 border-emerald-600/40 text-slate-200'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={personnelEvacuated}
-                  onChange={(e) => setPersonnelEvacuated(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                />
-                <div className="text-xs">
-                  <p className="font-semibold text-slate-200">All Workers Accounted For & Evacuated</p>
-                  <p className="text-slate-400 mt-0.5">
-                    Zero crew members remain inside vessel or active hazard zone.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
-                  equipmentRestored
-                    ? 'bg-slate-950/90 border-emerald-600/40 text-slate-200'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={equipmentRestored}
-                  onChange={(e) => setEquipmentRestored(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                />
-                <div className="text-xs">
-                  <p className="font-semibold text-slate-200">Plant Equipment Restored to Service Ready</p>
-                  <p className="text-slate-400 mt-0.5">
-                    Pre-start visual check completed with plant operations team.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-800 space-y-3">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Work Execution Outcome
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[
-                  {
-                    value: 'COMPLETED' as const,
-                    title: 'Work Completed',
-                    desc: 'Fully finished per scope',
-                  },
-                  {
-                    value: 'INCOMPLETE_HANDOVER' as const,
-                    title: 'Incomplete / Shift Handover',
-                    desc: 'Work continues next shift',
-                  },
-                  {
-                    value: 'STOPPED_UNSAFE' as const,
-                    title: 'Stopped Due to Hazard',
-                    desc: 'Incident or gas alarm halt',
-                  },
-                ].map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => setWorkStatus(item.value)}
-                    className={`p-3 text-left rounded-md border text-xs transition-colors ${
-                      workStatus === item.value
-                        ? 'bg-blue-950/50 border-blue-500 text-blue-200 ring-1 ring-blue-500'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <p className="font-semibold text-slate-200">{item.title}</p>
-                    <p className="text-[11px] text-slate-400 mt-1">{item.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Handover Notes / Discrepancies
-              </label>
-              <textarea
-                rows={3}
-                value={closureNotes}
-                onChange={(e) => setClosureNotes(e.target.value)}
-                placeholder="Log any anomalies, incomplete punch list items, or future maintenance recommendations..."
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-md text-xs sm:text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card
-            title="Final Verification & Archive"
-            subtitle="Permanent EHS compliance audit record"
-          >
+          {/* Flow 1: ACTIVE -> CLOSED (Requester submission) */}
+          {permit.status === 'ACTIVE' && (
             <div className="space-y-4">
-              <Button
-                variant="success"
-                className="w-full py-2.5 text-xs sm:text-sm font-semibold tracking-wide flex items-center justify-center gap-2"
-                disabled={!canClose}
-                onClick={handleClose}
-              >
-                <ShieldCheck size={16} />
-                Confirm Site Handover & Close Permit
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full py-2 text-xs sm:text-sm"
-                onClick={() => navigate(`/permits/${id}`)}
-              >
-                Cancel & Return
-              </Button>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
-              <div className="flex items-center gap-1.5 font-medium text-slate-300">
-                <FileCheck2 size={14} className="text-teal-400" />
-                <span>Verification Archive Protocol</span>
+              <div className="flex items-center gap-2 text-xs text-sky-400 font-bold uppercase tracking-wider">
+                <Lock size={15} />
+                <span>Stage 1: Requester Work Completion & Housekeeping Handover</span>
               </div>
-              <p>Closing will update permit status to CLOSED_VERIFIED and release the CMMS work order.</p>
+
+              {!isRequester ? (
+                <div className="p-4 bg-amber-950/30 border border-amber-800/60 rounded-md text-xs text-amber-200">
+                  Only the permit requester ({permit.requester?.name}) or plant administrator has authority to mark work completed.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded space-y-2 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={housekeepingVerified}
+                        onChange={(e) => setHousekeepingVerified(e.target.checked)}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-sky-500"
+                      />
+                      <span className="text-slate-200 font-medium">
+                        All tools, scrap materials, flammable cylinders, and waste cleared from work area
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isolationsRestored}
+                        onChange={(e) => setIsolationsRestored(e.target.checked)}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-sky-500"
+                      />
+                      <span className="text-slate-200 font-medium">
+                        All workers evacuated, temporary scaffolding tagged for dismantling, guards reinstalled
+                      </span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Work Completion Summary & Handover Remarks *
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={completionNotes}
+                      onChange={(e) => setCompletionNotes(e.target.value)}
+                      placeholder="e.g. Flange torqued to 350 Nm, weld seam hydro-tested at 15 bar with 0 leakage. Area cleaned and safe."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="primary"
+                      className="bg-sky-600 hover:bg-sky-500 text-white font-semibold"
+                      onClick={handleCloseoutSubmit}
+                      isLoading={isProcessing}
+                    >
+                      <CheckCircle2 size={15} /> Handover & Mark Work Complete (CLOSED)
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          </Card>
+          )}
+
+          {/* Flow 2: CLOSED -> CLOSED_VERIFIED (Safety Officer verification) */}
+          {permit.status === 'CLOSED' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs text-purple-400 font-bold uppercase tracking-wider">
+                <FileCheck size={16} />
+                <span>Stage 2: Safety Officer Site Verification & De-Isolation Closure</span>
+              </div>
+
+              {permit.completionNotes && (
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded text-xs space-y-1">
+                  <span className="text-slate-400 font-mono text-[10px] uppercase">Requester Completion Notes:</span>
+                  <p className="text-slate-200 font-sans italic">"{permit.completionNotes}"</p>
+                </div>
+              )}
+
+              {!isSafetyOfficer ? (
+                <div className="p-4 bg-amber-950/30 border border-amber-800/60 rounded-md text-xs text-amber-200">
+                  Awaiting independent Safety Officer or Administrator inspection to verify site cleanliness and de-isolation before terminal closure.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Safety Officer Inspection & De-Isolation Remarks
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={verificationComment}
+                      onChange={(e) => setVerificationComment(e.target.value)}
+                      placeholder="e.g. Physical walk-through completed. All LOTO padlocks and tags removed, process line re-energized, permit archived."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="primary"
+                      className="bg-purple-600 hover:bg-purple-500 text-white font-bold"
+                      onClick={handleVerificationSubmit}
+                      isLoading={isProcessing}
+                    >
+                      <ShieldCheck size={15} /> Verify Site & Finalize Closure (CLOSED_VERIFIED)
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Already Verified Terminal State */}
+          {permit.status === 'CLOSED_VERIFIED' && (
+            <div className="p-6 bg-emerald-950/20 border border-emerald-800/60 rounded-lg text-center space-y-2">
+              <CheckCircle2 size={36} className="text-emerald-400 mx-auto" />
+              <h3 className="text-sm font-bold text-emerald-200">Permit Successfully Closed & Verified</h3>
+              <p className="text-xs text-emerald-300/80">
+                This hazardous work authorization has completed its full regulatory lifecycle and is permanently archived in the immutable CMMS audit registry.
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };
+
+export default Closure;

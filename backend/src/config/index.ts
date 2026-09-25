@@ -8,6 +8,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  JWT_SECRET: z.string().default('super-secret-ptw-cmms-jwt-key-2026'),
+  JWT_EXPIRES_IN: z.string().default('24h'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -22,6 +24,8 @@ export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
   databaseUrl: parsedEnv.data.DATABASE_URL,
   corsOrigin: parsedEnv.data.CORS_ORIGIN,
+  jwtSecret: parsedEnv.data.JWT_SECRET,
+  jwtExpiresIn: parsedEnv.data.JWT_EXPIRES_IN,
   isProduction: parsedEnv.data.NODE_ENV === 'production',
 };
 

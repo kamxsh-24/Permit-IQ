@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
+import { ProtectedRoute } from '../components/common/ProtectedRoute';
 
 import { Login } from '../pages/Login';
 import { Dashboard } from '../pages/Dashboard';
@@ -19,7 +20,13 @@ export const AppRoutes: React.FC = () => {
         <Route path="/login" element={<Login />} />
       </Route>
 
-      <Route element={<AppLayout />}>
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/permits" element={<Permits />} />

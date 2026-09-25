@@ -25,7 +25,7 @@ export async function getHealth(_req: Request, res: Response): Promise<Response>
   };
 
   if (!dbHealth.connected) {
-    return sendError(res, 'Database connection is degraded', 503, healthData);
+    return sendError(res, 'Database connection is degraded', 503, 'SERVICE_UNAVAILABLE', healthData);
   }
 
   return sendSuccess(res, healthData, 'PTW CMMS Backend is operating normally');

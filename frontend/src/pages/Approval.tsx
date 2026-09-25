@@ -1,209 +1,349 @@
-import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   CheckCircle2,
   XCircle,
-  AlertCircle,
-  ShieldCheck,
+  AlertTriangle,
+  ArrowLeft,
+  ShieldAlert,
+  Clock,
   Building,
+  Wrench,
+  Users,
+  AlertOctagon,
 } from 'lucide-react';
+import apiClient from '../services/api';
+import { Permit } from '../types';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { PermitTypeBadge } from '../components/common/PermitTypeBadge';
+import { RoleBadge } from '../components/common/RoleBadge';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { StatusBadge } from '../components/common/StatusBadge';
-import { RoleBadge } from '../components/common/RoleBadge';
+import { useAuth } from '../context/AuthContext';
 
 export const Approval: React.FC = () => {
-  const { id = 'PTW-2026-0842' } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const [checklist, setChecklist] = useState({
-    isolationVerified: true,
-    gasTestConfirmed: true,
-    fireWatchAppointed: true,
-    ppeInspected: true,
-    emergencyEgressClear: false,
-  });
+  const [permit, setPermit] = useState<Permit | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [approvalComment, setApprovalComment] = useState<string>('');
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [remarks, setRemarks] = useState('');
-
-  const toggleCheck = (key: keyof typeof checklist) => {
-    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
+  const fetchPermit = async () => {
+    if (!id) return;
+    try {
+      setIsLoading(true);
+      const res = await apiClient.get(`/permits/${id}`);
+      if (res.data?.success) {
+        setPermit(res.data.data);
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to load permit for review');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const allChecksPassed = Object.values(checklist).every(Boolean);
+  useEffect(() => {
+    fetchPermit();
+  }, [id]);
 
-  const handleDecision = (decision: 'APPROVE' | 'REJECT' | 'CHANGES') => {
-    console.log(`[Approval Decision: ${decision}] for Permit ${id}`, {
-      checklist,
-      remarks,
-    });
-    alert(`Decision '${decision}' recorded (placeholder) for Permit ${id}`);
-    navigate(`/permits/${id}`);
+  if (isLoading) {
+    return (
+      <div className="py-24 text-center text-slate-400">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="font-mono text-xs uppercase tracking-wider">Loading Authorization Dossier...</p>
+      </div>
+    );
+  }
+
+  if (!permit) {
+    return (
+      <div className="py-16 text-center text-slate-400 space-y-3">
+        <AlertOctagon size={40} className="mx-auto text-red-400" />
+        <h2 className="text-lg font-bold text-slate-200">Permit Not Found</h2>
+        <Link to="/permits" className="inline-block px-4 py-2 bg-slate-800 rounded text-xs text-slate-200 hover:bg-slate-700">
+          Back to Permits
+        </Link>
+      </div>
+    );
+  }
+
+  const isRequesterSelf = user?.id === permit.requesterId;
+  const isAreaOwner = user?.role === 'AREA_OWNER';
+  const isAreaMismatch = isAreaOwner && user?.areaId !== permit.areaId;
+
+  const handleApprove = async () => {
+    try {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      await apiClient.post(`/permits/${permit.id}/approve`, {
+        comment: approvalComment.trim() || 'Approved in compliance with site safety requirements',
+      });
+      navigate(`/permits/${permit.id}`);
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Approval failed';
+      setErrorMsg(msg);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectionReason || rejectionReason.trim().length < 5) {
+      setErrorMsg('Please specify a rejection reason with at least 5 characters');
+      return;
+    }
+    try {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      await apiClient.post(`/permits/${permit.id}/reject`, {
+        reason: rejectionReason.trim(),
+      });
+      setIsRejectModalOpen(false);
+      navigate(`/permits/${permit.id}`);
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Rejection failed';
+      setErrorMsg(msg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/permits/${id}`}
-            className="p-1.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
-          >
-            <ArrowLeft size={18} />
-          </Link>
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+        <Link to={`/permits/${permit.id}`} className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors">
+          <ArrowLeft size={14} /> Back to Permit Details
+        </Link>
+        <span className="text-xs text-slate-400 font-mono">
+          Reviewing as: <strong className="text-slate-200">{user?.name}</strong> ({user?.role})
+        </span>
+      </div>
+
+      {errorMsg && (
+        <div className="p-3 bg-red-950/40 border border-red-800 rounded-md text-red-200 text-xs flex items-center gap-2">
+          <AlertOctagon size={16} className="text-red-400 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* Self-Approval Warning */}
+      {isRequesterSelf && (
+        <div className="p-4 bg-red-950/40 border border-red-700 rounded-lg flex items-center gap-3 text-xs text-red-200">
+          <AlertOctagon size={24} className="text-red-400 shrink-0" />
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold font-mono text-slate-100 tracking-tight">
-                Permit Authorization Sign-Off
-              </h1>
-              <StatusBadge status="PENDING_APPROVAL" size="sm" />
-            </div>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Reviewing Permit <strong className="font-mono text-blue-400">{id}</strong> • Reactor R-102 Hot Work
+            <p className="font-bold">SELF-APPROVAL PROHIBITED</p>
+            <p className="text-red-300">
+              You created this permit application. Under OSHA 1910 and ISO 45001 standards, self-authorization is strictly prohibited. An independent Area Owner and Safety Officer must review and sign off.
             </p>
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <RoleBadge role="AREA_OWNER" size="sm" />
-          <RoleBadge role="SAFETY_OFFICER" size="sm" />
+      {/* Area Mismatch Warning */}
+      {isAreaMismatch && (
+        <div className="p-4 bg-amber-950/40 border border-amber-700 rounded-lg flex items-center gap-3 text-xs text-amber-200">
+          <AlertTriangle size={24} className="text-amber-400 shrink-0" />
+          <div>
+            <p className="font-bold">FACILITY JURISDICTION MISMATCH</p>
+            <p className="text-amber-300">
+              You are designated as Area Owner for a different plant unit. You can only authorize permits within your assigned area.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="p-4 rounded-lg bg-blue-950/30 border border-blue-600/40 flex items-start gap-3">
-        <ShieldCheck className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-200/90 leading-relaxed">
-          <p className="font-semibold text-blue-300">Statutory Sign-Off Requirement</p>
-          <p className="mt-0.5">
-            By issuing your digital approval, you confirm that physical isolation has been inspected,
-            hazards are eliminated or controlled, and continuous emergency communication is functional.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card
-            title="Pre-Authorization Verification Checklist"
-            subtitle="All safety items must be verified before approval can be granted"
-          >
-            <div className="space-y-3">
-              {[
-                {
-                  key: 'isolationVerified' as const,
-                  title: 'Physical & Energy Isolation Confirmed (LOTO)',
-                  desc: 'Blinds installed, electrical lockouts verified with zero-energy check.',
-                },
-                {
-                  key: 'gasTestConfirmed' as const,
-                  title: 'Atmospheric Gas Test Validated',
-                  desc: 'Oxygen 20.9%, 0.0% LEL, toxic contaminants within OSHA permissible limits.',
-                },
-                {
-                  key: 'fireWatchAppointed' as const,
-                  title: 'Certified Fire Watch & Spark Barriers On-Site',
-                  desc: 'Continuous fire watch deployed with charged extinguisher and fire blankets.',
-                },
-                {
-                  key: 'ppeInspected' as const,
-                  title: 'Personal Protective Equipment Inspected',
-                  desc: 'Specialized face shields, flame-retardant overalls, and safety harnesses verified.',
-                },
-                {
-                  key: 'emergencyEgressClear' as const,
-                  title: 'Emergency Egress & Muster Route Unobstructed',
-                  desc: 'Primary and secondary evacuation pathways clear of trip hazards and tools.',
-                },
-              ].map((item) => (
-                <label
-                  key={item.key}
-                  className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
-                    checklist[item.key]
-                      ? 'bg-slate-950/90 border-emerald-600/40 text-slate-200'
-                      : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checklist[item.key]}
-                    onChange={() => toggleCheck(item.key)}
-                    className="h-4 w-4 mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                  />
-                  <div className="text-xs">
-                    <p className="font-semibold text-slate-200">{item.title}</p>
-                    <p className="text-slate-400 mt-0.5">{item.desc}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-800">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Approver Endorsement Comments / Special Conditions
-              </label>
-              <textarea
-                rows={3}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Enter mandatory conditional requirements (e.g. 'Must pause work if wind speed exceeds 25 knots')..."
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-md text-xs sm:text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </Card>
-        </div>
-
+      {/* Permit Review Card */}
+      <Card
+        title={`Authorization Sign-Off: ${permit.permitNumber}`}
+        subtitle={`Status: ${permit.status} • Hazard Classification: ${permit.type}`}
+      >
         <div className="space-y-6">
-          <Card
-            title="Authorization Actions"
-            subtitle="Executive safety sign-off decision"
-          >
-            <div className="space-y-3">
-              <Button
-                variant="success"
-                className="w-full py-2.5 text-xs sm:text-sm font-semibold tracking-wide flex items-center justify-center gap-2"
-                disabled={!allChecksPassed}
-                onClick={() => handleDecision('APPROVE')}
-              >
-                <CheckCircle2 size={16} />
-                Approve & Authorize Live Work
-              </Button>
-
-              {!allChecksPassed && (
-                <p className="text-[11px] text-amber-400 text-center flex items-center justify-center gap-1">
-                  <AlertCircle size={12} /> Check all 5 safety requirements to enable
-                </p>
-              )}
-
-              <Button
-                variant="warning"
-                className="w-full py-2 text-xs sm:text-sm"
-                onClick={() => handleDecision('CHANGES')}
-              >
-                Request Revisions from Requester
-              </Button>
-
-              <Button
-                variant="danger"
-                className="w-full py-2 text-xs sm:text-sm"
-                onClick={() => handleDecision('REJECT')}
-              >
-                <XCircle size={16} />
-                Reject Permit (Unsafe Conditions)
-              </Button>
+          {/* Metadata */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs bg-slate-950 p-4 rounded-lg border border-slate-800">
+            <div>
+              <span className="text-slate-400 font-mono text-[10px] uppercase">Plant Location:</span>
+              <p className="font-semibold text-slate-200 mt-0.5">{permit.plant?.name}</p>
             </div>
+            <div>
+              <span className="text-slate-400 font-mono text-[10px] uppercase">Process Area:</span>
+              <p className="font-semibold text-slate-200 mt-0.5">{permit.area?.name}</p>
+            </div>
+            <div>
+              <span className="text-slate-400 font-mono text-[10px] uppercase">Asset Equipment:</span>
+              <p className="font-semibold font-mono text-slate-200 mt-0.5">{permit.equipment?.equipmentTag || '--'}</p>
+            </div>
+            <div>
+              <span className="text-slate-400 font-mono text-[10px] uppercase">Requester:</span>
+              <p className="font-semibold text-slate-200 mt-0.5">{permit.requester?.name}</p>
+            </div>
+          </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
-              <div className="flex items-center gap-1.5 font-medium text-slate-300">
-                <Building size={14} className="text-slate-400" />
-                <span>Authorized Signatory Credentials</span>
+          {/* Work Description */}
+          <div>
+            <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Maintenance Scope of Work
+            </h4>
+            <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800 leading-relaxed">
+              {permit.workDescription}
+            </p>
+          </div>
+
+          {/* Type-Specific Data */}
+          {permit.typeSpecificData && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Type-Specific Technical Verification
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-slate-950 p-3.5 rounded-lg border border-slate-800">
+                {Object.entries(permit.typeSpecificData).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-slate-400 font-mono text-[10px] uppercase block">
+                      {key.replace(/([A-Z])/g, ' $1')}
+                    </span>
+                    <span className="font-mono text-slate-200 font-medium">
+                      {typeof value === 'boolean' ? (value ? 'YES' : 'NO') : String(value)}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <p>User: K. Henderson (Safety Officer Level 3)</p>
-              <p className="font-mono">Audit Reference: SIG-2026-9904</p>
             </div>
-          </Card>
+          )}
+
+          {/* Hazards & Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="p-3 bg-slate-950 rounded border border-slate-800">
+              <span className="text-amber-400 font-mono uppercase font-semibold text-[11px] block mb-1">
+                Identified Hazards:
+              </span>
+              <ul className="space-y-0.5 text-slate-300">
+                {permit.hazards?.map((h, i) => (
+                  <li key={i}>• {h}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded border border-slate-800">
+              <span className="text-blue-400 font-mono uppercase font-semibold text-[11px] block mb-1">
+                Required Personal Protective Equipment:
+              </span>
+              <ul className="space-y-0.5 text-slate-300">
+                {permit.ppeRequired?.map((p, i) => (
+                  <li key={i}>• {p}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Approval Signatures So Far */}
+          {permit.approvals && permit.approvals.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Recorded Authorization Decisions
+              </h4>
+              <div className="space-y-2">
+                {permit.approvals.map((app) => (
+                  <div key={app.id} className="p-3 bg-slate-950 rounded border border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-semibold text-slate-200">{app.approver?.name}</span> ({app.role})
+                      {app.comment && <p className="text-slate-400 text-[11px] mt-0.5 italic">"{app.comment}"</p>}
+                    </div>
+                    <span className="text-emerald-400 font-mono font-bold">{app.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sign-Off Inputs */}
+          {!isRequesterSelf && !isAreaMismatch && (
+            <div className="pt-4 border-t border-slate-800 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Approval Notes & Operational Safeguards Verified
+                </label>
+                <textarea
+                  rows={2}
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                  placeholder="e.g. Process unit isolated, drains flushed, continuous gas detector verified calibrated."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-800 text-red-400 hover:bg-red-950/40"
+                  onClick={() => setIsRejectModalOpen(true)}
+                  disabled={isProcessing}
+                >
+                  <XCircle size={15} /> Reject Permit
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  onClick={handleApprove}
+                  isLoading={isProcessing}
+                >
+                  <CheckCircle2 size={15} /> Authorize & Sign-Off
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      </Card>
+
+      {/* Reject Modal */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
+              <XCircle size={18} />
+              Reject Permit Application
+            </h3>
+            <p className="text-xs text-slate-300">
+              Under plant safety regulations, rejecting a permit requires documenting the specific non-compliance or hazard reasons:
+            </p>
+
+            <textarea
+              rows={3}
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="State why this permit cannot be approved (minimum 5 characters)..."
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button variant="outline" size="sm" onClick={() => setIsRejectModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold"
+                isLoading={isProcessing}
+                disabled={rejectionReason.trim().length < 5}
+                onClick={handleReject}
+              >
+                Confirm Rejection
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+export default Approval;

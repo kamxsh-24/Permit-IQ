@@ -4,39 +4,70 @@ export { UserRole, PermitStatus, PermitType, ApprovalStatus };
 
 // Type-specific dynamic data structures stored inside typeSpecificData (JSONB)
 export interface HotWorkData {
-  fireWatchName: string;
-  extinguisherType: string;
-  gasTestLelPercent: number; // Must be 0.0%
-  sparkShieldDeployed: boolean;
-  continuousVentilation: boolean;
+  hotWorkType: 'welding' | 'grinding' | 'cutting' | 'soldering';
+  fireWatchAssigned: boolean | string;
+  fireExtinguisherType: string;
+  combustibleClearanceRadius: number;
+  gasTestLelPercent: number;
+  gasTestO2Percent?: number;
+  gasTestTime?: string;
+  // Backward compatibility aliases
+  fireWatchName?: string;
+  sparkShieldDeployed?: boolean;
+  continuousVentilation?: boolean;
 }
 
 export interface ConfinedSpaceData {
-  oxygenPercent: number; // 19.5% - 23.5%
-  flammableLelPercent: number; // < 10%
-  toxicPpmH2S: number;
-  toxicPpmCO: number;
-  standbyPersonName: string;
-  rescueTripodInspected: boolean;
-  forcedAirVentilation: boolean;
+  spaceId: string;
+  entryPoint: string;
+  atmosphericO2Percent: number;
+  lelPercent: number;
+  h2sPpm: number;
+  coPpm: number;
+  standbyAttendant: string;
+  rescuePlan: string;
+  ventilationMethod: string;
+  entryExitLog?: boolean | string;
+  // Backward compatibility aliases
+  oxygenPercent?: number;
+  flammableLelPercent?: number;
+  toxicPpmH2S?: number;
+  toxicPpmCO?: number;
+  standbyPersonName?: string;
+  rescueTripodInspected?: boolean;
+  forcedAirVentilation?: boolean;
 }
 
 export interface WorkingAtHeightData {
-  workingHeightMeters: number;
+  heightMetres: number;
+  accessMethod: 'scaffold' | 'ladder' | 'MEWP' | 'rope';
+  fallArrestEquipment: string;
+  anchorPointChecked: boolean;
+  barricadingBelow: boolean;
+  // Backward compatibility aliases
+  workingHeightMeters?: number;
   scaffoldTagNumber?: string;
-  scaffoldInspectionValid: boolean;
-  fullBodyHarnessVerified: boolean;
-  dropZoneBarricaded: boolean;
-  toolTethersUsed: boolean;
+  scaffoldInspectionValid?: boolean;
+  fullBodyHarnessVerified?: boolean;
+  dropZoneBarricaded?: boolean;
+  toolTethersUsed?: boolean;
 }
 
 export interface ElectricalLotoData {
-  isolationPoint: string;
-  circuitBreakerNumber: string;
-  lotoLockboxNumber: string;
-  zeroEnergyStateVerified: boolean;
-  padlockAppliedBy: string;
-  dangerTagNumber: string;
+  equipmentTag: string;
+  voltageLevel: string;
+  isolationPoints: string;
+  lockNumbers: string;
+  tagNumbers: string;
+  earthingApplied: boolean;
+  testedDeadBy: string;
+  // Backward compatibility aliases
+  isolationPoint?: string;
+  circuitBreakerNumber?: string;
+  lotoLockboxNumber?: string;
+  zeroEnergyStateVerified?: boolean;
+  padlockAppliedBy?: string;
+  dangerTagNumber?: string;
 }
 
 export interface ExcavationData {
@@ -54,10 +85,31 @@ export type PermitTypeData =
   | ElectricalLotoData
   | ExcavationData;
 
+export interface JWTPayload {
+  userId: string;
+  email: string;
+  role: UserRole;
+  areaId: string | null;
+  name: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JWTPayload;
+    }
+  }
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   message?: string;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
   errors?: Record<string, string[]> | string;
   timestamp: string;
 }

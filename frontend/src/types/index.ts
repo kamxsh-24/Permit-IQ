@@ -20,123 +20,151 @@ export type PermitType =
   | 'HOT_WORK'
   | 'CONFINED_SPACE'
   | 'WORKING_AT_HEIGHT'
-  | 'ELECTRICAL_LOTO';
+  | 'ELECTRICAL_LOTO'
+  | 'EXCAVATION';
 
 // User Roles & Authorization Levels
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
 export type UserRole =
   | 'REQUESTER'
   | 'AREA_OWNER'
   | 'SAFETY_OFFICER'
   | 'ADMIN';
 
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-
-export interface User {
+export interface Plant {
   id: string;
-  fullName: string;
+  name: string;
+  code: string;
+}
+
+export interface Area {
+  id: string;
+  name: string;
+  plantId: string;
+  plant?: Plant;
+}
+
+export interface Equipment {
+  id: string;
+  name: string;
+  equipmentTag: string;
+  areaId: string;
+  area?: Area;
+}
+
+export interface AuthUser {
+  id: string;
+  name: string;
   email: string;
   role: UserRole;
-  badgeNumber: string;
-  department: string;
-  plantUnit?: string;
-  avatarUrl?: string;
+  areaId?: string | null;
+  area?: {
+    id: string;
+    name: string;
+    plantId: string;
+    plant?: Plant;
+  } | null;
+  createdAt?: string;
 }
 
-export interface HazardControl {
+// Backward compatibility alias
+export type User = AuthUser;
+
+export interface PermitApproval {
   id: string;
-  hazardDescription: string;
-  controlMeasure: string;
-  isMandatory: boolean;
-  isVerified: boolean;
-}
-
-export interface GasTestRecord {
-  id: string;
-  testedAt: string;
-  testedBy: string;
-  oxygenPercent: number;
-  flammableLelPercent: number;
-  toxicPpmH2S?: number;
-  toxicPpmCO?: number;
-  isSafeToEnter: boolean;
-  remarks?: string;
-}
-
-export interface IsolationLock {
-  tagId: string;
-  equipmentId: string;
-  isolationPoint: string;
-  isolationType: 'ELECTRICAL' | 'MECHANICAL' | 'PNEUMATIC' | 'HYDRAULIC';
-  appliedBy: string;
-  appliedAt: string;
-  verifiedBy?: string;
-}
-
-export interface PermitApprovalLog {
-  id: string;
-  role: UserRole;
-  approverName: string;
+  permitId: string;
   approverId: string;
-  decision: 'APPROVED' | 'REJECTED' | 'REQUEST_CHANGES';
-  comments?: string;
-  timestamp: string;
-  signatureReference?: string;
+  approver: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+  };
+  role: UserRole;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
+  comment?: string | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
 }
 
-export interface PermitClosure {
-  housekeepingCompleted: boolean;
-  equipmentRestored: boolean;
-  isolationsRemoved: boolean;
-  workCompletedStatus: 'COMPLETED' | 'INCOMPLETE_HANDOVER' | 'STOPPED_UNSAFE';
-  contractorSignedOffBy?: string;
-  contractorSignedOffAt?: string;
-  areaOwnerVerifiedBy?: string;
-  areaOwnerVerifiedAt?: string;
-  safetyOfficerClosedBy?: string;
-  safetyOfficerClosedAt?: string;
-  closureNotes?: string;
+export interface PermitAuditLog {
+  id: string;
+  permitId: string;
+  whoId: string;
+  who: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+  };
+  action: string;
+  timestamp: string;
+  fromValue?: string | null;
+  toValue?: string | null;
+  comment?: string | null;
 }
 
 export interface Permit {
   id: string;
   permitNumber: string;
-  title: string;
-  description: string;
-  permitType: PermitType;
+  type: PermitType;
   status: PermitStatus;
-  riskLevel: RiskLevel;
-  plantArea: string;
-  workOrderNumber?: string;
-  contractorCompany?: string;
-  numberOfWorkers: number;
-
   requesterId: string;
-  requesterName: string;
-  areaOwnerId?: string;
-  areaOwnerName?: string;
-  safetyOfficerId?: string;
-  safetyOfficerName?: string;
+  requester?: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+  };
+  contractorTeam: string;
+  workDescription: string;
+  plantId: string;
+  plant?: Plant;
+  areaId: string;
+  area?: Area;
+  equipmentId?: string | null;
+  equipment?: Equipment | null;
 
-  validFrom: string;
-  validTo: string;
+  plannedStart: string;
+  plannedEnd: string;
+
+  hazards: string[];
+  ppeRequired: string[];
+  precautions: string[];
+  typeSpecificData?: any;
+
+  completionNotes?: string | null;
+  verificationComment?: string | null;
+  closedAt?: string | null;
+  verifiedAt?: string | null;
+
+  approvals?: PermitApproval[];
+  auditLogs?: PermitAuditLog[];
+
   createdAt: string;
   updatedAt: string;
-
-  hazards?: HazardControl[];
-  gasTests?: GasTestRecord[];
-  isolations?: IsolationLock[];
-  approvals?: PermitApprovalLog[];
-  closure?: PermitClosure;
 }
 
-export interface ApiResponse<T> {
+export interface ApiResponse<T = any> {
+  success: boolean;
   data: T;
   message?: string;
-  success: boolean;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+  timestamp: string;
 }
 
-export interface ApiErrorResponse {
-  message: string;
-  statusCode: number;
-  errors?: Record<string, string[]>;
+export interface DashboardStats {
+  total: number;
+  active: number;
+  pendingApproval: number;
+  expiringSoon: number;
+  suspended: number;
+  closed: number;
+  myPendingApprovalsCount: number;
 }
